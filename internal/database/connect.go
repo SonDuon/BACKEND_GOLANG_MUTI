@@ -60,7 +60,6 @@ func ConnectDB(cfg Config) (*gorm.DB, error) {
 		&models.Episode{},
 		&models.MediaSource{},
 		&models.WatchHistory{},
-		// Thêm các model khác ở đây
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to auto migrate: %w", err)

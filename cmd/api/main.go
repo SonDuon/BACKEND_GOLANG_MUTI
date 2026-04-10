@@ -42,9 +42,10 @@ func main() {
 		})
 	})
 	port := "3000"
-	fmt.Printf("🚀 Server đang lắng nghe tại: http://localhost:%s\n", port)
+	fmt.Printf("🚀 Server đang chạy : http://localhost:%s\n", port)
 	err = app.Listen(":" + port)
 	if err != nil {
-		log.Fatal("❌ Server sập: ", err)
+		log.Fatal("❌ Server Lỗi: ", err)
+
 	}
 }

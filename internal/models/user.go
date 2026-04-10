@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 )
-
+// User đại diện cho bảng "users"
 type User struct {
 	ID           uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	Email        string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
@@ -13,7 +13,7 @@ type User struct {
 	FullName     string    `gorm:"type:varchar(255)" json:"full_name"`
 	CreatedAt    time.Time `json:"created_at"`
 }
-
+// WatchHistory đại diện cho lịch sử xem của người dùng
 type WatchHistory struct {
 	ID          uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	UserID      uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
