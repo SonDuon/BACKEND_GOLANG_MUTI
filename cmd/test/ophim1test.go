@@ -41,9 +41,9 @@ func main() {
 	// ─────────────────────────────────────
 	// TEST 2: Search Movies
 	// ─────────────────────────────────────
-	fmt.Println("\n🔍 Test 2: Search(truc-ngoc')")
+	fmt.Println("\n🔍 Test 2: Search(ma-tran')")
 	result, err := adapter.Search(ctx, &provider.SearchParams{
-		Keyword: "truc-ngoc",
+		Keyword: "ma-tran",
 		Limit:   3,
 		Page:    1,
 	})

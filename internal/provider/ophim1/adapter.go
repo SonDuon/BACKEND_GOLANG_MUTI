@@ -37,18 +37,18 @@ func (a *Adapter) Search(ctx context.Context, params *provider.SearchParams) (*p
 	if err != nil {
 		return nil, fmt.Errorf("%w: search ophim1: %v", provider.ErrAPIResponse, err)
 	}
-	items := a.mapper.toMovieDTOs(raw.Data.Items, a.Name())
-	return &provider.SearchResult{Items: items, Total: raw.Data.Params.Pagination.TotalItems, Page: params.Page, Limit: params.Limit, HasMore: len(items) == params.Limit}, nil
-}
 
-func (a *Adapter) GetList(ctx context.Context, page, limit int, sortBy string) (*provider.SearchResult, error) {
-	endpoint := mapSortToEndpoint(sortBy)
-	raw, err := a.client.list(ctx, endpoint, page, limit)
-	if err != nil {
-		return nil, fmt.Errorf("%w: list ophim1: %v", provider.ErrAPIResponse, err)
-	}
+	// ✅ Lấy items từ raw.Data.Items
 	items := a.mapper.toMovieDTOs(raw.Data.Items, a.Name())
-	return &provider.SearchResult{Items: items, Total: raw.Data.Params.Pagination.TotalItems, Page: page, Limit: limit, HasMore: len(items) == limit}, nil
+	total := raw.Data.Params.Pagination.TotalItems
+
+	return &provider.SearchResult{
+		Items:   items,
+		Total:   total,
+		Page:    params.Page,
+		Limit:   params.Limit,
+		HasMore: len(items) == params.Limit,
+	}, nil
 }
 
 func (a *Adapter) GetByExternalID(ctx context.Context, externalID string) (*provider.MovieDTO, error) {
@@ -66,6 +66,25 @@ func (a *Adapter) GetByExternalID(ctx context.Context, externalID string) (*prov
 	return dto, nil
 }
 
+func (a *Adapter) GetList(ctx context.Context, page, limit int, sortBy string) (*provider.SearchResult, error) {
+	endpoint := sortToEndpoint(sortBy)
+	raw, err := a.client.list(ctx, endpoint, page, limit)
+	if err != nil {
+		return nil, fmt.Errorf("%w: list ophim1: %v", provider.ErrAPIResponse, err)
+	}
+
+	items := a.mapper.toMovieDTOs(raw.Data.Items, a.Name())
+	total := raw.Data.Params.Pagination.TotalItems
+
+	return &provider.SearchResult{
+		Items:   items,
+		Total:   total,
+		Page:    page,
+		Limit:   limit,
+		HasMore: len(items) == limit,
+	}, nil
+}
+
 func (a *Adapter) GetStreamingLinks(ctx context.Context, movieExternalID, episodeExternalID string) (*provider.StreamingDTO, error) {
 	raw, err := a.client.detail(ctx, movieExternalID)
 	if err != nil {
@@ -77,14 +96,16 @@ func (a *Adapter) GetStreamingLinks(ctx context.Context, movieExternalID, episod
 		return nil, provider.ErrStreamingLinksNotFound
 	}
 
-	durationSeconds := parseDuration(raw.Data.Item.Time)
+	// ✅ Lấy dữ liệu từ Item
+	item := raw.Data.Item
+	durationSeconds := parseDuration(item.Time)
 
 	return &provider.StreamingDTO{
 		MovieID:   movieExternalID,
 		EpisodeID: episodeExternalID,
-		Title:     raw.Data.Item.Name,
+		Title:     item.Name,
 		Sources:   sources,
-		Thumbnail: joinImageURL(raw.Data.Item.ThumbURL),
+		Thumbnail: joinImageURL(item.ThumbURL),
 		Duration:  durationSeconds,
 		ExpiresAt: time.Now().Add(30 * time.Minute).Unix(),
 		Metadata: map[string]any{
