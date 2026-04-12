@@ -1,4 +1,3 @@
-// File: cmd/api/main.go
 package main
 
 import (
@@ -8,8 +7,7 @@ import (
 
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/config"
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/database"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -31,21 +29,27 @@ func main() {
 		log.Fatal("❌ Hệ thống sập do không thể kết nối Database: ", err)
 	}
 	defer database.CloseDB()
-	// 3. Khởi động server API
-	app := fiber.New()
-	app.Use(logger.New())
 
-	app.Get("/api/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
+	// 3. Khởi động server API với Gin
+	// gin.DebugMode hiện query SQL ra console (tiện khi dev)
+	gin.SetMode(gin.DebugMode)
+
+	// gin.Default() đã bao gồm middleware Logger & Recovery (bắt panic)
+	r := gin.Default()
+
+	// Route Health Check
+	r.GET("/api/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
 			"status":  "success",
 			"message": "Trái tim Backend đang đập rất khỏe!",
 		})
 	})
-	port := "3000"
-	fmt.Printf("🚀 Server đang chạy : http://localhost:%s\n", port)
-	err = app.Listen(":" + port)
-	if err != nil {
-		log.Fatal("❌ Server Lỗi: ", err)
 
+	// 🌐 Cổng mặc định cho Go API (tránh conflict với Next.js port 3000)
+	port := ":8080"
+	fmt.Printf("🚀 Server Gin đang chạy: http://localhost%s\n", port)
+
+	if err := r.Run(port); err != nil {
+		log.Fatal("❌ Server Lỗi: ", err)
 	}
 }

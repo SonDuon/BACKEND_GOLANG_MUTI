@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/models"
@@ -13,53 +14,52 @@ import (
 
 var DB *gorm.DB
 
-// Config chứa thông tin kết nối
 type Config struct {
 	Host     string
 	Port     string
 	User     string
 	Password string
 	DBName   string
-	SSLMode  string // disable, require, verify-full
+	SSLMode  string
 }
 
-// ConnectDB khởi tạo kết nối và chạy AutoMigrate
 func ConnectDB(cfg Config) (*gorm.DB, error) {
-	// Build DSN (Data Source Name)
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Ho_Chi_Minh",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
 	)
 
-	// Cấu hình logger cho GORM (hiển thị query khi debug)
 	newLogger := logger.New(
-		log.New(log.Writer(), "\r\n", log.LstdFlags),
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
-			SlowThreshold:             time.Second,
+			SlowThreshold:             200 * time.Millisecond,
 			LogLevel:                  logger.Warn,
 			IgnoreRecordNotFoundError: true,
 			Colorful:                  true,
 		},
 	)
 
-	// Mở kết nối
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger:                 newLogger,
-		SkipDefaultTransaction: true, // Optional: tăng performance
+		Logger: newLogger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}
-	DB.Exec(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`)
-	//  AUTO MIGRATE - Tạo/cập nhật table tự động
+
+	// ✅ Xử lý lỗi extension rõ ràng
+	if err := DB.Exec(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`).Error; err != nil {
+		log.Printf("⚠️ Không thể tạo extension uuid-ossp (có thể đã tồn tại hoặc không có quyền): %v", err)
+	}
+
+	// AutoMigrate
 	err = DB.AutoMigrate(
 		&models.User{},
-		&models.Movie{},
+		&models.WatchHistory{},
 		&models.Category{},
+		&models.Movie{},
 		&models.Episode{},
 		&models.MediaSource{},
-		&models.WatchHistory{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to auto migrate: %w", err)
@@ -69,7 +69,6 @@ func ConnectDB(cfg Config) (*gorm.DB, error) {
 	return DB, nil
 }
 
-// CloseDB đóng kết nối khi ứng dụng dừng
 func CloseDB() error {
 	if DB != nil {
 		sqlDB, err := DB.DB()
