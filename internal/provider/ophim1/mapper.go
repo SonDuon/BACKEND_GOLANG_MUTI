@@ -1,6 +1,7 @@
 package ophim1
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -81,30 +82,33 @@ func (m *mapper) toMovieDTO(raw *detailResponse, source string) *provider.MovieD
 }
 
 // toVideoSources: Map Detail API -> Danh sách link phim
+
 func (m *mapper) toVideoSources(raw *detailResponse, episodeSlug, source string) []provider.VideoSource {
 	var sources []provider.VideoSource
-	// ⚠️ Lấy episodes từ item
+
 	episodes := raw.Data.Item.Episodes
 
-	// Filter đúng tập nếu có episodeSlug (thường là "Full" hoặc "tap-1")
-	if episodeSlug != "" {
-		for _, ep := range episodes {
-			if ep.ServerName == episodeSlug {
-				episodes = []episodeItem{ep}
-				break
-			}
-		}
-	}
+	// 🔑 Normalize episodeSlug: "tap-1" → "1", "episode-2" → "2"
+	normalizedSlug := normalizeEpisodeSlug(episodeSlug)
 
+	// Ophim1 structure: mỗi "episode" thực ra là SERVER, server_data chứa tất cả tập
 	for _, ep := range episodes {
-		// server_data là mảng các server, không phải map
-		for _, srvData := range ep.ServerData {
+		for _, srv := range ep.ServerData {
+			// 🎯 Filter đúng tập nếu có episodeSlug
+			if episodeSlug != "" {
+				// Match với: exact slug, exact name, hoặc normalized version
+				if srv.Slug != episodeSlug && srv.Name != episodeSlug &&
+					srv.Slug != normalizedSlug && srv.Name != normalizedSlug {
+					continue // Skip tập không khớp
+				}
+			}
+
 			// Ưu tiên link_m3u8 (HLS), fallback sang link_embed
-			videoURL := srvData.LinkM3u8
+			videoURL := srv.LinkM3u8
 			videoType := "hls"
 
 			if videoURL == "" {
-				videoURL = srvData.LinkEmbed
+				videoURL = srv.LinkEmbed
 				videoType = "embed"
 			}
 
@@ -113,18 +117,34 @@ func (m *mapper) toVideoSources(raw *detailResponse, episodeSlug, source string)
 			}
 
 			sources = append(sources, provider.VideoSource{
-				ID:        provider.Coalesce(srvData.Slug, srvData.Name),
-				Label:     ep.ServerName, // Ví dụ: "Vietsub #1"
+				ID:        provider.Coalesce(srv.Slug, srv.Name),
+				Label:     fmt.Sprintf("%s - Tập %s", ep.ServerName, srv.Name),
 				Quality:   detectQuality(videoURL),
 				URL:       videoURL,
 				Type:      videoType,
 				Server:    ep.ServerName,
-				IsDefault: ep.ServerName == "Vietsub #1" || ep.ServerName == "Server 1",
+				IsDefault: srv.Slug == "1" || srv.Name == "1", // Default tập 1
 			})
 		}
 	}
 
 	return sources
+}
+
+// normalizeEpisodeSlug: Chuyển "tap-1" → "1", "episode-2" → "2"
+func normalizeEpisodeSlug(slug string) string {
+	if slug == "" {
+		return ""
+	}
+	s := strings.ToLower(slug)
+	// Remove common prefixes
+	s = strings.TrimPrefix(s, "tap-")
+	s = strings.TrimPrefix(s, "tập-")
+	s = strings.TrimPrefix(s, "episode-")
+	s = strings.TrimPrefix(s, "ep-")
+	s = strings.TrimPrefix(s, "tập")
+	s = strings.TrimSpace(s)
+	return s
 }
 
 func (m *mapper) extractGenres(cats []categoryItem) []string {

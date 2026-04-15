@@ -200,11 +200,11 @@ type episodeItem struct {
 
 // serverDataItem: Cấu trúc của mỗi server trong server_data array
 type serverDataItem struct {
-	Name      string `json:"name"` // "Full", "Tập 1", ...
-	Slug      string `json:"slug"` // "full", "tap-1", ...
+	Name      string `json:"name"` // "Tập 1", "Full", ...
+	Slug      string `json:"slug"` // "tap-1", "full", ... ← QUAN TRỌNG
 	Filename  string `json:"filename"`
 	LinkEmbed string `json:"link_embed"` // Embed URL
-	LinkM3u8  string `json:"link_m3u8"`  // HLS URL (ưu tiên dùng)
+	LinkM3u8  string `json:"link_m3u8"`  // HLS URL (ưu tiên)
 }
 
 type timestampInfo struct {

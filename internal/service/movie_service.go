@@ -35,7 +35,7 @@ func (s *MovieService) GetMovieDetail(ctx context.Context, slug string) (*models
 	// 1️⃣ Tìm trong Database trước
 	movie, err := s.repo.GetBySlug(ctx, slug)
 	if err == nil {
-		return movie, nil // ✅ Có trong DB -> Trả về ngay
+		return movie, nil 
 	}
 
 	// Kiểm tra lỗi "Không tìm thấy bản ghi"
@@ -145,22 +145,38 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 // ==========================================
 
 // convertDTOToModel: Chuyển Provider DTO -> GORM Model
+// internal/service/movie_service.go
+
+// convertDTOToModel: Chuyển Provider DTO → GORM Model
+// ⚠️ QUAN TRỌNG: Chỉ lưu metadata, KHÔNG lưu episodes từ external API
 func (s *MovieService) convertDTOToModel(dto *provider.MovieDTO) *models.Movie {
 	movie := &models.Movie{
+		// 🔑 Hybrid Source Tracking
+		Source:     dto.Source,
+		ExternalID: dto.ExternalID,
+		
+		// 📋 Metadata cơ bản
 		Title:         dto.Title,
 		OriginalTitle: dto.OriginalTitle,
 		Slug:          dto.Slug,
 		Description:   dto.Overview,
 		PosterURL:     dto.PosterURL,
+		BackdropURL:   dto.BackdropURL,
+		
+		// 📊 Metadata cho search/filter
 		Type:          dto.Type,
 		Status:        dto.Status,
 		ReleaseYear:   dto.ReleaseYear,
 		Rating:        dto.Rating,
-		Source:        dto.Source,
-		ExternalID:    dto.ExternalID,
+		Duration:      dto.Runtime,
+		
+		// 🎬 Episodes: 
+		// - External API: KHÔNG lưu (fetch tươi khi play)
+		// - Self-hosted: Sẽ được set riêng qua Admin Handler
+		Episodes: nil, // ← Quan trọng: không lưu episodes từ Ophim1
 	}
 
-	// Map Categories (Genres)
+	// Map categories (genres/countries) → Lưu vào DB để search/filter nhanh
 	for _, genre := range dto.Genres {
 		movie.Categories = append(movie.Categories, models.Category{
 			Name: genre,
