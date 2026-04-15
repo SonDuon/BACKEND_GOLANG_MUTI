@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/provider"
@@ -16,9 +18,36 @@ type client struct {
 
 func newClient(baseURL string, timeout time.Duration) *client {
 	return &client{
-		baseURL: baseURL,
-		http:    provider.DefaultHTTPClient(timeout),
+		// ✅ Loại bỏ dấu "/" thừa ở cuối URL nếu có
+		baseURL: strings.TrimRight(baseURL, "/"),
+		http: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+			},
+		},
 	}
+}
+
+// ✅ Hàm search đã fix
+func (c *client) search(ctx context.Context, keyword string, page, limit int) (*searchResponse, error) {
+	// 1. URL Encode keyword để xử lý khoảng trắng & ký tự đặc biệt (VD: "ma trận" → "ma%20tr%E1%BA%ADn")
+	encodedKeyword := url.QueryEscape(keyword)
+
+	// 2. Build URL chuẩn
+	searchURL := fmt.Sprintf("%s/v1/api/tim-kiem?keyword=%s&page=%d&limit=%d",
+		c.baseURL, encodedKeyword, page, limit)
+
+	// 🐛 Debug: In ra URL thực tế đang gọi (xoá sau khi OK)
+	fmt.Printf("🔍 Calling Ophim1 Search: %s\n", searchURL)
+
+	var resp searchResponse
+	if err := provider.FetchJSON(ctx, c.http, searchURL, &resp); err != nil {
+		return nil, fmt.Errorf("search ophim1: %w", err)
+	}
+
+	return &resp, nil
 }
 
 func (c *client) ping(ctx context.Context) bool {
@@ -37,21 +66,6 @@ func (c *client) ping(ctx context.Context) bool {
 	defer resp.Body.Close()
 
 	return resp.StatusCode < 500
-}
-
-func (c *client) search(ctx context.Context, keyword string, page, limit int) (*searchResponse, error) {
-	url := fmt.Sprintf("%s/v1/api/tim-kiem?keyword=%s",
-		c.baseURL,
-		keyword,
-	)
-
-	// Ophim1 có thể không support pagination trong search, ignore page/limit nếu cần
-
-	var resp searchResponse
-	if err := provider.FetchJSON(ctx, c.http, url, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
 
 func (c *client) detail(ctx context.Context, slug string) (*detailResponse, error) {

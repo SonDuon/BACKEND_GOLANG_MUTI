@@ -22,7 +22,7 @@ func main() {
 	// 2. Khởi tạo Adapter
 	cfg := ophim1.DefaultConfig()
 	cfg.Timeout = 10 * time.Second  // Test nhanh hơn
-	adapter := ophim1.New(cfg, log) // ⚠️ Nếu New() yêu cầu *logger.Logger, hãy truyền instance logger của bạn
+	adapter := ophim1.New(cfg, log) 
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

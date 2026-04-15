@@ -7,6 +7,10 @@ import (
 
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/config"
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/database"
+	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/handler"
+	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/provider/ophim1"
+	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/repository"
+	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,21 +38,32 @@ func main() {
 	// gin.DebugMode hiện query SQL ra console (tiện khi dev)
 	gin.SetMode(gin.DebugMode)
 
-	// gin.Default() đã bao gồm middleware Logger & Recovery (bắt panic)
-	r := gin.Default()
+	// 4. Khởi tạo Repository & Provider
+	movieRepo := repository.NewMovieRepository(database.DB)
+	ophimAdapter := ophim1.New(ophim1.DefaultConfig(), nil)
 
-	// Route Health Check
+	// 5. Khởi tạo Handler
+	movieSvc := service.NewMovieService(movieRepo, ophimAdapter)
+	movieHandler := handler.NewMovieHandler(movieSvc)
+
+	// 6. Setup Gin Router
+	r := gin.Default()
+	api := r.Group("/api/v1")
+
+	// Register admin routes
+	adminHandler := handler.NewAdminHandler(movieRepo, ophimAdapter)
+	adminHandler.RegisterRoutes(api)
+	// Register movie routes
+	movieHandler.RegisterRoutes(api)
+
+	// Health check route
 	r.GET("/api/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":  "success",
-			"message": "Trái tim Backend đang đập rất khỏe!",
-		})
+		c.JSON(200, gin.H{"status": "ok" })
 	})
 
-	// 🌐 Cổng mặc định cho Go API (tránh conflict với Next.js port 3000)
+	// 7. Run server
 	port := ":8080"
 	fmt.Printf("🚀 Server Gin đang chạy: http://localhost%s\n", port)
-
 	if err := r.Run(port); err != nil {
 		log.Fatal("❌ Server Lỗi: ", err)
 	}

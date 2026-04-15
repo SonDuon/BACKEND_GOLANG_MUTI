@@ -29,6 +29,8 @@ func DefaultHTTPClient(timeout time.Duration) *http.Client {
 // FetchJSON: Helper fetch + parse JSON từ URL (giảm boilerplate code)
 func FetchJSON[T any](ctx context.Context, client *http.Client, url string, result *T) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
