@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/service"
 	"github.com/gin-gonic/gin"
@@ -19,9 +20,13 @@ func NewMovieHandler(svc *service.MovieService) *MovieHandler {
 func (h *MovieHandler) RegisterRoutes(r *gin.RouterGroup) {
 	movies := r.Group("/movies")
 	{
-		// 🎬 Public endpoint cho User
+		// 🎬 Endpoint để lấy chi tiết phim (sẽ tự động import nếu chưa có trong DB)
 		movies.GET("/:slug", h.GetMovie)
+		// 🎬 Endpoint để lấy link xem phim (có thể có query param episode=slug-episode để lấy link tập cụ thể)
 		movies.GET("/:slug/watch", h.GetWatch)
+		// 📋 List movies
+		movies.GET("", h.ListMovies)
+		movies.GET("/", h.ListMovies)
 	}
 }
 
@@ -66,5 +71,26 @@ func (h *MovieHandler) GetWatch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    links,
+	})
+}
+
+// ListMovies: GET /api/v1/movies?page=1&limit=20
+func (h *MovieHandler) ListMovies(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+
+	ctx := c.Request.Context()
+	movies, total, err := h.service.GetMovieList(ctx, page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    movies,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
 	})
 }

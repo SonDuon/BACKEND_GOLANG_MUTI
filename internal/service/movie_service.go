@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/database" // Dùng tạm để query List
+	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/database"
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/models"
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/provider"
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/repository"
