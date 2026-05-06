@@ -14,8 +14,9 @@ type MovieDTO struct {
 	// 🎬 Hiển thị
 	Title         string `json:"title"`
 	OriginalTitle string `json:"original_title,omitempty"`
-	Slug          string `json:"slug,omitempty"`     // URL-friendly name
-	Overview      string `json:"overview,omitempty"` // Mô tả ngắn
+	Slug          string `json:"slug,omitempty"` // URL-friendly name
+	Overview      string `json:"overview,omitempty"`
+	ThumbURL      string `json:"thumb_url,omitempty"`
 	PosterURL     string `json:"poster_url,omitempty"`
 	BackdropURL   string `json:"backdrop_url,omitempty"`
 	TrailerURL    string `json:"trailer_url,omitempty"`

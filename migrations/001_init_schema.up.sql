@@ -43,6 +43,7 @@ CREATE TABLE movies (
     original_title VARCHAR(255),
     slug VARCHAR(255) UNIQUE NOT NULL,
     description TEXT,
+    thumb_url VARCHAR(500),
     poster_url VARCHAR(500),
     backdrop_url VARCHAR(500),
     

@@ -29,6 +29,7 @@ func (m *mapper) toSearchResultDTO(item searchItem, source string) *provider.Mov
 		OriginalTitle: item.OriginName,
 		Slug:          item.Slug,
 		Overview:      "", // Search API không trả về mô tả chi tiết
+		ThumbURL:      joinImageURL(item.ThumbURL),
 		PosterURL:     joinImageURL(item.PosterURL),
 		Type:          mapType(item.Type),
 		Status:        mapStatus(item.EpisodeCurrent),
@@ -69,9 +70,10 @@ func (m *mapper) toMovieDTO(raw *detailResponse, source string) *provider.MovieD
 		Title:         item.Name,
 		OriginalTitle: item.OriginName,
 		Slug:          item.Slug,
-		Overview:      stripHTML(item.Content), // Loại bỏ thẻ <p>
+		Overview:      stripHTML(item.Content),
+		ThumbURL:      joinImageURL(item.ThumbURL),
 		PosterURL:     joinImageURL(item.PosterURL),
-		BackdropURL:   joinImageURL(item.BackdropURL), // Nếu có
+		BackdropURL:   joinImageURL(item.BackdropURL),
 		Type:          mapType(item.Type),
 		Status:        mapStatus(item.Status),
 		ReleaseYear:   item.Year,
@@ -185,7 +187,7 @@ func joinImageURL(imagePath string) string {
 		return imagePath
 	}
 	// CDN của Ophim1
-	return "https://img.ophim.live/" + imagePath
+	return "https://img.ophim.live/uploads/movies/" + imagePath
 }
 
 func parseEpisodeCount(episodeCurrent string) *int {

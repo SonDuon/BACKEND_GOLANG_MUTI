@@ -122,7 +122,7 @@ type detailData struct {
 	SeoOnPage       detailSeoOnPage `json:"seoOnPage"`
 	BreadCrumb      []breadCrumb    `json:"breadCrumb"`
 	Params          detailParams    `json:"params"`
-	Item            detailItem      `json:"item"` // ✅ Singular: 1 phim
+	Item            detailItem      `json:"item"` 
 	AppDomainCDNImg string          `json:"APP_DOMAIN_CDN_IMAGE"`
 }
 

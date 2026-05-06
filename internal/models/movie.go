@@ -37,6 +37,7 @@ type Movie struct {
 	OriginalTitle string    `gorm:"type:varchar(255);index" json:"original_title,omitempty"`
 	Slug          string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"slug"`
 	Description   string    `gorm:"type:text" json:"description"`
+	ThumbURL      string    `gorm:"type:varchar(500)" json:"thumb_url,omitempty"`
 	PosterURL     string    `gorm:"type:varchar(500)" json:"poster_url"`
 	BackdropURL   string    `gorm:"type:varchar(500)" json:"backdrop_url,omitempty"`
 

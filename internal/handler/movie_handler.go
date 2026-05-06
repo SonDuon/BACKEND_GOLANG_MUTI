@@ -26,17 +26,16 @@ func (h *MovieHandler) RegisterRoutes(r *gin.RouterGroup) {
 		movies.GET("/:slug/watch", h.GetWatch)
 		// 📋 List movies
 		movies.GET("", h.ListMovies)
-		movies.GET("/", h.ListMovies)
+		movies.GET("/", h.ListMovies) // Hỗ trợ cả /movies và /movies/
+		// 🔍 Search movies
+		movies.GET("/search", h.SearchMovies)
+
 	}
 }
 
 // Handler cho detail endpoint
 func (h *MovieHandler) GetMovie(c *gin.Context) {
 	slug := c.Param("slug")
-
-	// 🔥 Log để debug
-	fmt.Printf("🎯 [GetMovie] Received request for slug: '%s'\n", slug)
-
 	ctx := c.Request.Context()
 	movie, err := h.service.GetMovieDetail(ctx, slug)
 	if err != nil {
@@ -48,7 +47,6 @@ func (h *MovieHandler) GetMovie(c *gin.Context) {
 		})
 		return
 	}
-
 	fmt.Printf("✅ [GetMovie] Success for slug: '%s'\n", slug)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -78,9 +76,17 @@ func (h *MovieHandler) GetWatch(c *gin.Context) {
 func (h *MovieHandler) ListMovies(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	typeFilter := c.Query("type")     // movie/series
+	statusFilter := c.Query("status") // completed/ongoing
 
-	ctx := c.Request.Context()
-	movies, total, err := h.service.GetMovieList(ctx, page, limit)
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 50 {
+		limit = 20
+	}
+
+	movies, total, err := h.service.ListMovies(c.Request.Context(), page, limit, typeFilter, statusFilter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -89,8 +95,44 @@ func (h *MovieHandler) ListMovies(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    movies,
-		"total":   total,
-		"page":    page,
-		"limit":   limit,
+		"pagination": gin.H{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+			"pages": (total + int64(limit) - 1) / int64(limit),
+		},
+	})
+}
+
+func (h *MovieHandler) SearchMovies(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Thiếu tham số 'q' (từ khóa tìm kiếm)"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 50 {
+		limit = 20
+	}
+
+	movies, total, err := h.service.SearchMovies(c.Request.Context(), query, page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    movies,
+		"pagination": gin.H{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+			"pages": (total + int64(limit) - 1) / int64(limit),
+		},
 	})
 }

@@ -19,6 +19,38 @@ type MovieService struct {
 	provider provider.MovieProvider
 }
 
+// SearchMovies: Tìm kiếm phim từ Ophim API
+func (s *MovieService) SearchMovies(ctx context.Context, query string, page int, limit int) ([]models.Movie, int64, error) {
+	// Gọi provider search
+	searchResult, err := s.provider.Search(ctx, &provider.SearchParams{
+		Keyword: query,
+		Page:    page,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("provider search error: %w", err)
+	}
+
+	// Convert DTOs -> Models và auto-import từng phim vào DB
+	var movies []models.Movie
+	for _, dto := range searchResult.Items {
+		movieModel := s.convertDTOToModel(&dto)
+
+		// Auto-import vào DB (không fail request nếu lỗi)
+		if err := s.repo.Create(ctx, movieModel); err != nil {
+			log.Printf("⚠️ Auto-import failed for '%s': %v", dto.Slug, err)
+		}
+
+		movies = append(movies, *movieModel)
+	}
+
+	return movies, searchResult.Total, nil
+}
+
+func (s *MovieService) ListMovies(ctx context.Context, page int, limit int, typeFilter string, statusFilter string) ([]models.Movie, int64, error) {
+	return s.repo.List(ctx, page, limit, typeFilter, statusFilter)
+}
+
 func NewMovieService(repo repository.MovieRepository, provider provider.MovieProvider) *MovieService {
 	return &MovieService{
 		repo:     repo,
@@ -35,7 +67,7 @@ func (s *MovieService) GetMovieDetail(ctx context.Context, slug string) (*models
 	// 1️⃣ Tìm trong Database trước
 	movie, err := s.repo.GetBySlug(ctx, slug)
 	if err == nil {
-		return movie, nil 
+		return movie, nil
 	}
 
 	// Kiểm tra lỗi "Không tìm thấy bản ghi"
@@ -154,23 +186,24 @@ func (s *MovieService) convertDTOToModel(dto *provider.MovieDTO) *models.Movie {
 		// 🔑 Hybrid Source Tracking
 		Source:     dto.Source,
 		ExternalID: dto.ExternalID,
-		
+
 		// 📋 Metadata cơ bản
 		Title:         dto.Title,
 		OriginalTitle: dto.OriginalTitle,
 		Slug:          dto.Slug,
 		Description:   dto.Overview,
+		ThumbURL:      dto.ThumbURL,
 		PosterURL:     dto.PosterURL,
 		BackdropURL:   dto.BackdropURL,
-		
+
 		// 📊 Metadata cho search/filter
-		Type:          dto.Type,
-		Status:        dto.Status,
-		ReleaseYear:   dto.ReleaseYear,
-		Rating:        dto.Rating,
-		Duration:      dto.Runtime,
-		
-		// 🎬 Episodes: 
+		Type:        dto.Type,
+		Status:      dto.Status,
+		ReleaseYear: dto.ReleaseYear,
+		Rating:      dto.Rating,
+		Duration:    dto.Runtime,
+
+		// 🎬 Episodes:
 		// - External API: KHÔNG lưu (fetch tươi khi play)
 		// - Self-hosted: Sẽ được set riêng qua Admin Handler
 		Episodes: nil, // ← Quan trọng: không lưu episodes từ Ophim1
