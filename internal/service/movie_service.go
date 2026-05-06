@@ -19,6 +19,9 @@ type MovieService struct {
 	provider provider.MovieProvider
 }
 
+
+
+
 // SearchMovies: Tìm kiếm phim từ Ophim API
 func (s *MovieService) SearchMovies(ctx context.Context, query string, page int, limit int) ([]models.Movie, int64, error) {
 	// Gọi provider search
@@ -141,6 +144,27 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 	// 2️⃣ Xử lý theo Source
 	if movie.Source == "self" {
 		// 🏠 TỰ HOST: Lấy link từ Database (MediaSources)
+		if episodeSlug == "" || strings.EqualFold(episodeSlug, "full") {
+			if movie.Type == "movie" || len(movie.Episodes) == 1 {
+				for _, ep := range movie.Episodes {
+					if len(ep.MediaSources) == 0 {
+						continue
+					}
+
+					src := ep.MediaSources[0]
+					return &provider.StreamingDTO{
+						MovieID:   movie.ID.String(),
+						EpisodeID: ep.ID.String(),
+						Sources: []provider.VideoSource{{
+							Label: src.ServerName,
+							URL:   src.SourceKey,
+							Type:  src.SourceType,
+						}},
+					}, nil
+				}
+			}
+		}
+
 		for _, ep := range movie.Episodes {
 			if ep.Slug == episodeSlug {
 				if len(ep.MediaSources) > 0 {
