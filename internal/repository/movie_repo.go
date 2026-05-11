@@ -14,6 +14,7 @@ type MovieRepository interface {
 	GetBySlug(ctx context.Context, slug string) (*models.Movie, error)
 	GetByExternalID(ctx context.Context, source, externalID string) (*models.Movie, error)
 	List(ctx context.Context, page, limit int, typeFilter, statusFilter string) ([]models.Movie, int64, error)
+	Search(ctx context.Context, query string, page, limit int) ([]models.Movie, int64, error)
 }
 
 type movieRepo struct {
@@ -139,22 +140,22 @@ func (r *movieRepo) List(ctx context.Context, page, limit int, typeFilter, statu
 
 // Search: Tìm kiếm phim theo từ khóa (ILIKE)
 func (r *movieRepo) Search(ctx context.Context, query string, page, limit int) ([]models.Movie, int64, error) {
-    var movies []models.Movie
-    var total int64
+	var movies []models.Movie
+	var total int64
 
-    // Cấu hình truy vấn: tìm trong title, original_title, description
-    queryStr := "%" + query + "%"
-    db := r.db.WithContext(ctx).Model(&models.Movie{}).
-        Where("title ILIKE ? OR original_title ILIKE ? OR description ILIKE ?", queryStr, queryStr, queryStr).
-        Preload("Categories")
+	// Cấu hình truy vấn: tìm trong title, original_title, description
+	queryStr := "%" + query + "%"
+	db := r.db.WithContext(ctx).Model(&models.Movie{}).
+		Where("title ILIKE ? OR original_title ILIKE ? OR description ILIKE ?", queryStr, queryStr, queryStr).
+		Preload("Categories")
 
-    // Đếm tổng số kết quả
-    if err := db.Count(&total).Error; err != nil {
-        return nil, 0, err
-    }
+	// Đếm tổng số kết quả
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
-    // Phân trang
-    offset := (page - 1) * limit
-    err := db.Limit(limit).Offset(offset).Find(&movies).Error
-    return movies, total, err
+	// Phân trang
+	offset := (page - 1) * limit
+	err := db.Limit(limit).Offset(offset).Find(&movies).Error
+	return movies, total, err
 }

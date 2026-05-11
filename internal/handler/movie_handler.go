@@ -57,7 +57,7 @@ func (h *MovieHandler) GetMovie(c *gin.Context) {
 // Handler cho watch endpoint
 func (h *MovieHandler) GetWatch(c *gin.Context) {
 	slug := c.Param("slug")
-	episodeSlug := c.DefaultQuery("episode", "full")
+	episodeSlug := c.Query("episode")
 
 	ctx := c.Request.Context()
 	links, err := h.service.GetWatchLinks(ctx, slug, episodeSlug)
@@ -72,10 +72,10 @@ func (h *MovieHandler) GetWatch(c *gin.Context) {
 	})
 }
 
-// ListMovies: GET /api/v1/movies?page=1&limit=20
+// ListMovies: GET /api/v1/movies?page=1&limit=24
 func (h *MovieHandler) ListMovies(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "24"))
 	typeFilter := c.Query("type")     // movie/series
 	statusFilter := c.Query("status") // completed/ongoing
 
@@ -83,7 +83,7 @@ func (h *MovieHandler) ListMovies(c *gin.Context) {
 		page = 1
 	}
 	if limit < 1 || limit > 50 {
-		limit = 20
+		limit = 24
 	}
 
 	movies, total, err := h.service.ListMovies(c.Request.Context(), page, limit, typeFilter, statusFilter)
@@ -112,12 +112,12 @@ func (h *MovieHandler) SearchMovies(c *gin.Context) {
 	}
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "24"))
 	if page < 1 {
 		page = 1
 	}
 	if limit < 1 || limit > 50 {
-		limit = 20
+		limit = 24
 	}
 
 	movies, total, err := h.service.SearchMovies(c.Request.Context(), query, page, limit)

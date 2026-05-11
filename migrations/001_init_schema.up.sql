@@ -52,7 +52,7 @@ CREATE TABLE movies (
     external_id VARCHAR(100) NOT NULL,
     
     -- 📊 Metadata
-    type VARCHAR(50) NOT NULL CHECK (type IN ('movie', 'series')),
+    type VARCHAR(50) NOT NULL,
     status VARCHAR(50) CHECK (status IN ('completed', 'ongoing')),
     release_year INTEGER,
     rating DECIMAL(3,2) DEFAULT 0.00,

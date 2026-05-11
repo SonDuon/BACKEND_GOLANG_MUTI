@@ -46,7 +46,7 @@ type Movie struct {
 	ExternalID string `gorm:"type:varchar(100);not null;index:idx_source_external" json:"external_id"`
 
 	// 📊 Metadata for Search/Filter
-	Type        string  `gorm:"type:varchar(50);not null;index;check:type IN ('movie','series')" json:"type"`
+	Type        string  `gorm:"type:varchar(50);not null;index" json:"type"` // Lưu type nguyên bản: movie, series, hoathinh, phimbo, tvshows, etc.
 	Status      string  `gorm:"type:varchar(50);index;check:status IN ('completed','ongoing')" json:"status"`
 	ReleaseYear int     `gorm:"type:int;index" json:"release_year"`
 	Rating      float32 `gorm:"type:decimal(3,2);default:0.00;index" json:"rating"`
@@ -63,6 +63,7 @@ type Movie struct {
 	Episodes []Episode `gorm:"foreignKey:MovieID;constraint:OnDelete:CASCADE" json:"episodes,omitempty"`
 
 	// ⏰ Timestamps
+	LastSyncedAt time.Time      `gorm:"index" json:"last_synced_at"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

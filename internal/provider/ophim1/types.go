@@ -56,7 +56,8 @@ type searchItem struct {
 	OriginName       string         `json:"origin_name"`
 	AlternativeNames []string       `json:"alternative_names"`
 	Slug             string         `json:"slug"`
-	Type             string         `json:"type"` // "single", "series", "hoathinh"
+	Type             string         `json:"type"`   // "single", "series", "hoathinh"
+	Status           string         `json:"status"` // "completed", "ongoing"
 	ThumbURL         string         `json:"thumb_url"`
 	PosterURL        string         `json:"poster_url"`
 	SubDocquyen      bool           `json:"sub_docquyen"`
@@ -122,7 +123,7 @@ type detailData struct {
 	SeoOnPage       detailSeoOnPage `json:"seoOnPage"`
 	BreadCrumb      []breadCrumb    `json:"breadCrumb"`
 	Params          detailParams    `json:"params"`
-	Item            detailItem      `json:"item"` 
+	Item            detailItem      `json:"item"`
 	AppDomainCDNImg string          `json:"APP_DOMAIN_CDN_IMAGE"`
 }
 

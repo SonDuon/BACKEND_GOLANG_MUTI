@@ -22,7 +22,7 @@ type MovieDTO struct {
 	TrailerURL    string `json:"trailer_url,omitempty"`
 
 	// 📊 Metadata
-	Type        string  `json:"type"`             // "movie" | "series"
+	Type        string  `json:"type"`             // "movie", "series", "hoathinh", "phimbo", "tvshows", etc. (lưu nguyên bản từ API)
 	Status      string  `json:"status,omitempty"` // "ongoing" | "completed"
 	ReleaseYear int     `json:"release_year,omitempty"`
 	Rating      float32 `json:"rating,omitempty"`

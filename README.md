@@ -25,7 +25,7 @@
 
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| GET | `/api/v1/movies?page=1&limit=20` | Lấy danh sách phim |
+| GET | `/api/v1/movies?page=1&limit=24` | Lấy danh sách phim |
 | GET | `/api/v1/movies/:slug` | Lấy chi tiết phim |
 | GET | `/api/v1/movies/:slug/watch?episode=full` | Lấy link xem phim |
 | GET | `/api/v1/admin/providers/health` | Kiểm tra health providers |

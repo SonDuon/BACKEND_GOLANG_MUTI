@@ -32,7 +32,7 @@ func (m *mapper) toSearchResultDTO(item searchItem, source string) *provider.Mov
 		ThumbURL:      joinImageURL(item.ThumbURL),
 		PosterURL:     joinImageURL(item.PosterURL),
 		Type:          mapType(item.Type),
-		Status:        mapStatus(item.EpisodeCurrent),
+		Status:        mapSearchStatus(item.Status, item.EpisodeCurrent),
 		ReleaseYear:   item.Year,
 		Rating:        rating,
 		Genres:        m.extractGenres(item.Category),
@@ -164,19 +164,32 @@ func (m *mapper) extractGenres(cats []categoryItem) []string {
 // ─────────────────────────────────────
 
 func mapType(t string) string {
-	t = strings.ToLower(t)
-	if t == "phimbo" || t == "series" || t == "tv" {
-		return "series"
-	}
-	return "movie"
+	// Lưu type nguyên bản từ API
+	return strings.ToLower(t)
 }
 
 func mapStatus(s string) string {
-	s = strings.ToLower(s)
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return "ongoing"
+	}
+
 	if strings.Contains(s, "ongoing") || strings.Contains(s, "đang") || strings.Contains(s, "airing") {
 		return "ongoing"
 	}
-	return "completed"
+
+	if strings.Contains(s, "completed") || strings.Contains(s, "hoàn") || strings.Contains(s, "full") {
+		return "completed"
+	}
+
+	return "ongoing"
+}
+
+func mapSearchStatus(status string, episodeCurrent string) string {
+	if strings.TrimSpace(status) != "" {
+		return mapStatus(status)
+	}
+	return mapStatus(episodeCurrent)
 }
 
 func joinImageURL(imagePath string) string {
