@@ -1,1 +1,4 @@
 (frontend/app.js and frontend/index.html are source files, no build artifacts, dependencies, or temp files in the changes)
+.env
+.env.local
+.env.*.local
