@@ -11,22 +11,30 @@ import (
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/provider"
 )
 
+// ✅ Singleton HTTP Client - Reuse connection pool
+var httpClient *http.Client
+
+func init() {
+	httpClient = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100, // Tăng từ 10 → 100 cho high concurrency
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second,
+			DisableKeepAlives:   false, // Giữ kết nối alive để reuse
+			ForceAttemptHTTP2:   true,  // Sử dụng HTTP/2 nếu server hỗ trợ
+		},
+	}
+}
+
 type client struct {
 	baseURL string
-	http    *http.Client
 }
 
 func newClient(baseURL string, timeout time.Duration) *client {
 	return &client{
-		// ✅ Loại bỏ dấu "/" thừa ở cuối URL nếu có
 		baseURL: strings.TrimRight(baseURL, "/"),
-		http: &http.Client{
-			Timeout: timeout,
-			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 10,
-			},
-		},
 	}
 }
 
@@ -39,11 +47,8 @@ func (c *client) search(ctx context.Context, keyword string, page, limit int) (*
 	searchURL := fmt.Sprintf("%s/v1/api/tim-kiem?keyword=%s&page=%d&limit=%d",
 		c.baseURL, encodedKeyword, page, limit)
 
-	// 🐛 Debug: In ra URL thực tế đang gọi (xoá sau khi OK)
-	fmt.Printf("🔍 Calling Ophim1 Search: %s\n", searchURL)
-
 	var resp searchResponse
-	if err := provider.FetchJSON(ctx, c.http, searchURL, &resp); err != nil {
+	if err := provider.FetchJSON(ctx, httpClient, searchURL, &resp); err != nil {
 		return nil, fmt.Errorf("search ophim1: %w", err)
 	}
 
@@ -59,7 +64,7 @@ func (c *client) ping(ctx context.Context) bool {
 		return false
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return false
 	}
@@ -76,7 +81,7 @@ func (c *client) detail(ctx context.Context, slug string) (*detailResponse, erro
 
 	var resp detailResponse
 
-	if err := provider.FetchJSON(ctx, c.http, url, &resp); err != nil {
+	if err := provider.FetchJSON(ctx, httpClient, url, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -88,7 +93,7 @@ func (c *client) list(ctx context.Context, endpoint string, page, limit int) (*s
 
 	var resp searchResponse
 
-	if err := provider.FetchJSON(ctx, c.http, url, &resp); err != nil {
+	if err := provider.FetchJSON(ctx, httpClient, url, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

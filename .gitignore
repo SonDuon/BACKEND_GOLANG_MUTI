@@ -1,4 +1,45 @@
-(frontend/app.js and frontend/index.html are source files, no build artifacts, dependencies, or temp files in the changes)
+```
+# Go build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Go cache and tools
+.gocache/
+go/pkg/
+go/bin/
+
+# Dependencies
+vendor/
+
+# Logs
+*.log
+
+# Environment
 .env
 .env.local
-.env.*.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Build artifacts
+dist/
+build/
+target/
+```
