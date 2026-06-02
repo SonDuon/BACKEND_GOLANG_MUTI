@@ -3,27 +3,32 @@ package repository
 import (
 	"fmt"
 
-	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/models"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-// findOrCreateCategory: Tìm category theo slug + type, nếu chưa có thì tạo mới
-// Trả về ID của category (dùng để gán vào junction table movie_categories)
+// findOrCreateCategory: Tìm category theo slug + type, nếu chưa có thì tạo mới (concurrent-safe)
 func findOrCreateCategory(db *gorm.DB, name, slug, categoryType string) (uuid.UUID, error) {
-	var cat models.Category
+	var idStr string
+	newUUID := uuid.New()
 
-	// 🔑 GORM FirstOrCreate: Tìm trước, nếu không thấy thì Insert với struct thứ 2
-	err := db.Where("slug = ? AND type = ?", slug, categoryType).
-		FirstOrCreate(&cat, models.Category{
-			Name: name,
-			Slug: slug,
-			Type: categoryType,
-		}).Error
+	// Sử dụng Upsert nguyên tử trên Postgres
+	err := db.Raw(`
+		INSERT INTO categories (id, name, slug, type, created_at, updated_at)
+		VALUES (?, ?, ?, ?, NOW(), NOW())
+		ON CONFLICT (slug, type)
+		DO UPDATE SET name = EXCLUDED.name
+		RETURNING id
+	`, newUUID, name, slug, categoryType).Scan(&idStr).Error
 
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("findOrCreateCategory failed: %w", err)
+		return uuid.Nil, fmt.Errorf("findOrCreateCategory failed to execute upsert: %w", err)
 	}
 
-	return cat.ID, nil
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("findOrCreateCategory failed to parse returned uuid: %w", err)
+	}
+
+	return id, nil
 }

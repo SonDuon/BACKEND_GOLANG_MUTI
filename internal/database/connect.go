@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -52,20 +51,7 @@ func ConnectDB(cfg Config) (*gorm.DB, error) {
 		log.Printf("⚠️ Không thể tạo extension uuid-ossp (có thể đã tồn tại hoặc không có quyền): %v", err)
 	}
 
-	// AutoMigrate
-	err = DB.AutoMigrate(
-		&models.User{},
-		&models.WatchHistory{},
-		&models.Category{},
-		&models.Movie{},
-		&models.Episode{},
-		&models.MediaSource{},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to auto migrate: %w", err)
-	}
-
-	log.Println("✅ Database connected and migrated successfully!")
+	log.Println("✅ Database connected successfully!")
 	return DB, nil
 }
 

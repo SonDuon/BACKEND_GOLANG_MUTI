@@ -64,9 +64,9 @@ type Movie struct {
 
 	// ⏰ Timestamps
 	LastSyncedAt time.Time      `gorm:"index" json:"last_synced_at"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Movie) TableName() string { return "movies" }

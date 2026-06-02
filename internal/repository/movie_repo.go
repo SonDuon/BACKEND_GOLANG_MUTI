@@ -3,11 +3,32 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/SonDuon/BACKEND_GOLANG_MUTI/internal/models"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+// MovieFilter cấu hình truy vấn phân trang & lọc
+type MovieFilter struct {
+	Page      int
+	Limit     int
+	SortBy    string // format: "field:asc" hoặc "field:desc"
+	Year      int
+	Status    string
+	GenreSlug string // Dùng cho ListByYear kết hợp lọc thể loại
+}
+
+func (f *MovieFilter) GetOffset() int {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.Limit < 1 {
+		f.Limit = 20
+	}
+	return (f.Page - 1) * f.Limit
+}
 
 type MovieRepository interface {
 	Create(ctx context.Context, movie *models.Movie) error
@@ -15,54 +36,62 @@ type MovieRepository interface {
 	GetByExternalID(ctx context.Context, source, externalID string) (*models.Movie, error)
 	List(ctx context.Context, page, limit int, typeFilter, statusFilter string) ([]models.Movie, int64, error)
 	Search(ctx context.Context, query string, page, limit int) ([]models.Movie, int64, error)
+
+	// 🆕 Category-Based Filtering
+	ListByCategory(ctx context.Context, categoryType, slug string, filters *MovieFilter) ([]models.Movie, int64, error)
+	ListByYear(ctx context.Context, year int, filters *MovieFilter) ([]models.Movie, int64, error)
+	GetOrCreateCategory(ctx context.Context, name, slug, categoryType string) (*models.Category, error)
 }
 
 type movieRepo struct {
 	db *gorm.DB
+	mu sync.Mutex
 }
 
 func NewMovieRepository(db *gorm.DB) MovieRepository {
 	return &movieRepo{db: db}
 }
 
-// Create: Import movie + xử lý duplicate categories bằng FindOrCreate
-func (r *movieRepo) Create(ctx context.Context, movie *models.Movie) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+// ------------------------------------------------------------------
+// CORE CRUD & SYNC METHODS
+// ------------------------------------------------------------------
 
-		// 1️⃣ Kiểm tra phim đã tồn tại chưa (tránh import trùng)
+func (r *movieRepo) Create(ctx context.Context, movie *models.Movie) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 1️⃣ Kiểm tra trùng (source + external_id) hoặc slug
 		var existing models.Movie
-		if err := tx.Where("source = ? AND external_id = ?", movie.Source, movie.ExternalID).
-			First(&existing).Error; err == nil {
-			// Đã tồn tại → Update thay vì Create
+		if err := tx.Where("(source = ? AND external_id = ?) OR slug = ?", movie.Source, movie.ExternalID, movie.Slug).First(&existing).Error; err == nil {
 			movie.ID = existing.ID
 			return tx.Model(&existing).Updates(movie).Error
 		}
 
-		// 2️⃣ FindOrCreate Categories (Genres/Countries)
+		// 2️⃣ FindOrCreate Categories
 		var categoryIDs []uuid.UUID
 		for _, cat := range movie.Categories {
 			if cat.Slug == "" || cat.Type == "" {
 				continue
 			}
-			id, err := findOrCreateCategory(tx, cat.Name, cat.Slug, cat.Type)
+			createdCat, err := r.getOrCreateCategoryTx(tx, cat.Name, cat.Slug, cat.Type)
 			if err != nil {
 				return err
 			}
-			categoryIDs = append(categoryIDs, id)
+			categoryIDs = append(categoryIDs, createdCat.ID)
 		}
 
-		// 3️⃣ Tách relations ra khỏi struct movie để GORM chỉ insert bảng movies
+		// 3️⃣ Tách relations để GORM chỉ insert bảng movies
 		movie.Categories = nil
 		if err := tx.Create(movie).Error; err != nil {
 			return fmt.Errorf("create movie: %w", err)
 		}
 
-		// 4️⃣ Gán categories vào movie qua junction table (dùng Association Mode)
+		// 4️⃣ Gán categories qua junction table
 		if len(categoryIDs) > 0 {
 			var categories []models.Category
 			tx.Where("id IN ?", categoryIDs).Find(&categories)
 
-			// Cast to []interface{} for Append
 			cats := make([]interface{}, len(categories))
 			for i, cat := range categories {
 				cats[i] = cat
@@ -72,12 +101,10 @@ func (r *movieRepo) Create(ctx context.Context, movie *models.Movie) error {
 				return fmt.Errorf("associate categories: %w", err)
 			}
 		}
-
 		return nil
 	})
 }
 
-// GetBySlug & GetByExternalID: Query thông thường + Preload relations
 func (r *movieRepo) GetBySlug(ctx context.Context, slug string) (*models.Movie, error) {
 	var movie models.Movie
 	err := r.db.WithContext(ctx).
@@ -104,16 +131,11 @@ func (r *movieRepo) GetByExternalID(ctx context.Context, source, externalID stri
 	return &movie, nil
 }
 
-// Thêm vào interface MovieRepository
-
-// Thêm implementation
 func (r *movieRepo) List(ctx context.Context, page, limit int, typeFilter, statusFilter string) ([]models.Movie, int64, error) {
 	var movies []models.Movie
 	var total int64
-
 	query := r.db.WithContext(ctx).Model(&models.Movie{})
 
-	// Filter theo type/status nếu có
 	if typeFilter != "" {
 		query = query.Where("type = ?", typeFilter)
 	}
@@ -121,12 +143,10 @@ func (r *movieRepo) List(ctx context.Context, page, limit int, typeFilter, statu
 		query = query.Where("status = ?", statusFilter)
 	}
 
-	// Đếm tổng số bản ghi (không preload để nhanh)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// Phân trang + Preload categories
 	offset := (page - 1) * limit
 	err := query.
 		Preload("Categories").
@@ -138,24 +158,110 @@ func (r *movieRepo) List(ctx context.Context, page, limit int, typeFilter, statu
 	return movies, total, err
 }
 
-// Search: Tìm kiếm phim theo từ khóa (ILIKE)
 func (r *movieRepo) Search(ctx context.Context, query string, page, limit int) ([]models.Movie, int64, error) {
 	var movies []models.Movie
 	var total int64
-
-	// Cấu hình truy vấn: tìm trong title, original_title, description
 	queryStr := "%" + query + "%"
 	db := r.db.WithContext(ctx).Model(&models.Movie{}).
 		Where("title ILIKE ? OR original_title ILIKE ? OR description ILIKE ?", queryStr, queryStr, queryStr).
 		Preload("Categories")
 
-	// Đếm tổng số kết quả
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// Phân trang
 	offset := (page - 1) * limit
 	err := db.Limit(limit).Offset(offset).Find(&movies).Error
 	return movies, total, err
+}
+
+// ------------------------------------------------------------------
+// 🆕 CATEGORY-BASED FILTERING IMPLEMENTATIONS
+// ------------------------------------------------------------------
+
+func (r *movieRepo) ListByCategory(ctx context.Context, categoryType, slug string, filters *MovieFilter) ([]models.Movie, int64, error) {
+	var movies []models.Movie
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&models.Movie{}).
+		Joins("JOIN movie_categories mc ON mc.movie_id = movies.id").
+		Joins("JOIN categories c ON c.id = mc.category_id AND c.type = ? AND c.slug = ?", categoryType, slug)
+
+	// Áp dụng bộ lọc phụ
+	if filters.Status != "" {
+		query = query.Where("movies.status = ?", filters.Status)
+	}
+	if filters.Year != 0 {
+		query = query.Where("movies.release_year = ?", filters.Year)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count movies by category: %w", err)
+	}
+
+	// Default sort: release_year DESC
+	sortClause := "movies.release_year DESC"
+	if filters.SortBy != "" {
+		sortClause = "movies." + filters.SortBy
+	}
+
+	offset := filters.GetOffset()
+	err := query.
+		Preload("Categories").
+		Order(sortClause).
+		Limit(filters.Limit).
+		Offset(offset).
+		Find(&movies).Error
+
+	return movies, total, err
+}
+
+func (r *movieRepo) ListByYear(ctx context.Context, year int, filters *MovieFilter) ([]models.Movie, int64, error) {
+	var movies []models.Movie
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&models.Movie{}).
+		Where("movies.release_year = ?", year)
+
+	if filters.GenreSlug != "" {
+		query = query.
+			Joins("JOIN movie_categories mc ON mc.movie_id = movies.id").
+			Joins("JOIN categories c ON c.id = mc.category_id AND c.type = 'genre' AND c.slug = ?", filters.GenreSlug)
+	}
+	if filters.Status != "" {
+		query = query.Where("movies.status = ?", filters.Status)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count movies by year: %w", err)
+	}
+
+	offset := filters.GetOffset()
+	err := query.
+		Preload("Categories").
+		Order("movies.release_year DESC").
+		Limit(filters.Limit).
+		Offset(offset).
+		Find(&movies).Error
+
+	return movies, total, err
+}
+
+// GetOrCreateCategory: Public method for auto-sync
+func (r *movieRepo) GetOrCreateCategory(ctx context.Context, name, slug, categoryType string) (*models.Category, error) {
+	return r.getOrCreateCategoryTx(r.db.WithContext(ctx), name, slug, categoryType)
+}
+
+// getOrCreateCategoryTx: Transaction-safe internal helper
+func (r *movieRepo) getOrCreateCategoryTx(tx *gorm.DB, name, slug, categoryType string) (*models.Category, error) {
+	id, err := findOrCreateCategory(tx, name, slug, categoryType)
+	if err != nil {
+		return nil, err
+	}
+	return &models.Category{
+		ID:   id,
+		Name: name,
+		Slug: slug,
+		Type: categoryType,
+	}, nil
 }

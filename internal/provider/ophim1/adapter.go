@@ -20,7 +20,7 @@ type Adapter struct {
 func New(cfg Config, log *logger.Logger) *Adapter {
 	return &Adapter{
 		cfg:    cfg,
-		client: newClient(cfg.BaseURL, cfg.Timeout),
+		client: newClient(cfg.BaseURL),
 		mapper: newMapper(),
 		cache:  newMetaCache(30 * time.Minute),
 		log:    log,

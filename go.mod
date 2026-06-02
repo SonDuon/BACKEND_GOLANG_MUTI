@@ -1,6 +1,6 @@
 module github.com/SonDuon/BACKEND_GOLANG_MUTI
 
-go 1.19
+go 1.25.0
 
 require (
 	github.com/gin-contrib/cors v1.4.0

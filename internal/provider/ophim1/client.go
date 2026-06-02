@@ -32,7 +32,7 @@ type client struct {
 	baseURL string
 }
 
-func newClient(baseURL string, timeout time.Duration) *client {
+func newClient(baseURL string) *client {
 	return &client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 	}

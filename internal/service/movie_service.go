@@ -22,7 +22,17 @@ type MovieService struct {
 
 const detailSyncTTL = 12 * time.Hour
 
-// SearchMovies: Tìm kiếm phim từ Ophim API
+// NewMovieService khởi tạo service
+func NewMovieService(repo repository.MovieRepository, provider provider.MovieProvider) *MovieService {
+	return &MovieService{
+		repo:     repo,
+		provider: provider,
+	}
+}
+
+// ==========================================
+// 🔍 SEARCH
+// ==========================================
 func (s *MovieService) SearchMovies(ctx context.Context, query string, page int, limit int) ([]models.Movie, int64, error) {
 	query = strings.TrimSpace(query)
 
@@ -51,36 +61,48 @@ func (s *MovieService) SearchMovies(ctx context.Context, query string, page int,
 	movies = make([]models.Movie, 0, len(searchResult.Items))
 	for _, dto := range searchResult.Items {
 		movieModel := s.convertDTOToModel(&dto)
-
-		// Auto-import vào DB (không fail request nếu lỗi)
 		if err := s.repo.Create(ctx, movieModel); err != nil {
 			log.Printf("⚠️ Auto-import failed for '%s': %v", dto.Slug, err)
 		}
-
 		movies = append(movies, *movieModel)
 	}
 
 	return movies, searchResult.Total, nil
 }
 
-func (s *MovieService) ListMovies(ctx context.Context, page int, limit int, typeFilter string, statusFilter string) ([]models.Movie, int64, error) {
+// ==========================================
+// 📋 LIST (Phân trang cơ bản)
+// ==========================================
+func (s *MovieService) ListMovies(ctx context.Context, page, limit int, typeFilter, statusFilter string) ([]models.Movie, int64, error) {
 	return s.repo.List(ctx, page, limit, typeFilter, statusFilter)
 }
 
-func NewMovieService(repo repository.MovieRepository, provider provider.MovieProvider) *MovieService {
-	return &MovieService{
-		repo:     repo,
-		provider: provider,
+// GetMovieList: Giữ lại tương thích với code cũ (dùng trực tiếp DB)
+func (s *MovieService) GetMovieList(ctx context.Context, page, limit int) ([]*models.Movie, int64, error) {
+	var movies []*models.Movie
+	var total int64
+
+	query := database.DB.Model(&models.Movie{})
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
+
+	offset := (page - 1) * limit
+	if err := query.
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&movies).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return movies, total, nil
 }
 
 // ==========================================
-// 🎬 1. DETAIL (Lazy Import Pattern)
+// 🎬 DETAIL (Lazy Import Pattern)
 // ==========================================
-
-// GetMovieDetail: Kiểm tra DB -> Nếu không có thì gọi API -> Lưu DB -> Trả về
 func (s *MovieService) GetMovieDetail(ctx context.Context, slug string) (*models.Movie, error) {
-	// 1️⃣ Tìm trong Database trước
 	movie, err := s.repo.GetBySlug(ctx, slug)
 	if err == nil {
 		if shouldRefreshMovieDetail(movie) {
@@ -88,19 +110,15 @@ func (s *MovieService) GetMovieDetail(ctx context.Context, slug string) (*models
 			if strings.TrimSpace(externalID) == "" {
 				externalID = slug
 			}
-
 			go s.backgroundSyncMovie(context.Background(), externalID)
 		}
-
 		return movie, nil
 	}
 
-	// Kiểm tra lỗi "Không tìm thấy bản ghi"
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
-	// 2️⃣ Không có trong DB -> fetch đồng bộ từ provider và import
 	return s.fetchAndImportFromProvider(ctx, slug)
 }
 
@@ -108,22 +126,18 @@ func shouldRefreshMovieDetail(movie *models.Movie) bool {
 	if movie == nil {
 		return false
 	}
-
 	status := strings.ToLower(strings.TrimSpace(movie.Status))
 	if status == "completed" {
 		return false
 	}
-
 	if movie.LastSyncedAt.IsZero() {
 		return true
 	}
-
 	return time.Since(movie.LastSyncedAt) >= detailSyncTTL
 }
 
 func (s *MovieService) fetchAndImportFromProvider(ctx context.Context, slug string) (*models.Movie, error) {
 	log.Printf("🔍 Movie '%s' not found in DB. Fetching from provider...", slug)
-
 	dto, err := s.provider.GetByExternalID(ctx, slug)
 	if err != nil {
 		return nil, fmt.Errorf("provider error: %w", err)
@@ -139,7 +153,6 @@ func (s *MovieService) fetchAndImportFromProvider(ctx context.Context, slug stri
 
 func (s *MovieService) backgroundSyncMovie(ctx context.Context, externalID string) {
 	log.Printf("🔄 Background sync started for '%s'", externalID)
-
 	syncCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
@@ -164,43 +177,9 @@ func (s *MovieService) backgroundSyncMovie(ctx context.Context, externalID strin
 }
 
 // ==========================================
-// 📋 2. LIST (Phân trang)
+// ▶️ WATCH (Lấy link xem)
 // ==========================================
-
-// GetMovieList: Lấy danh sách phim từ Database
-func (s *MovieService) GetMovieList(ctx context.Context, page, limit int) ([]*models.Movie, int64, error) {
-	var movies []*models.Movie
-	var total int64
-
-	// Dùng database.DB trực tiếp cho nhanh trong giai đoạn test
-	// (Production nên đưa logic này vào Repository)
-	query := database.DB.Model(&models.Movie{})
-
-	// Đếm tổng số phim
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// Lấy dữ liệu với phân trang (Page 1 -> Offset 0)
-	offset := (page - 1) * limit
-	if err := query.
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&movies).Error; err != nil {
-		return nil, 0, err
-	}
-
-	return movies, total, nil
-}
-
-// ==========================================
-// ▶️ 3. WATCH (Lấy link xem)
-// ==========================================
-
-// GetWatchLinks: Trả về link streaming cho User
 func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSlug string) (*provider.StreamingDTO, error) {
-	// 1️⃣ Lấy thông tin phim (Tận dụng hàm Detail để đảm bảo phim đã có trong DB/API)
 	movie, err := s.GetMovieDetail(ctx, slug)
 	if err != nil {
 		return nil, err
@@ -211,15 +190,12 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 		episodeSlug = ""
 	}
 
-	// 3️⃣ Xử lý theo Source
 	if movie.Source == "self" {
-		// 🏠 TỰ HOST: Lấy link từ Database (MediaSources)
 		if !isSeriesType(movie.Type) {
 			for _, ep := range movie.Episodes {
 				if len(ep.MediaSources) == 0 {
 					continue
 				}
-
 				src := ep.MediaSources[0]
 				return &provider.StreamingDTO{
 					MovieID:   movie.ID.String(),
@@ -233,7 +209,6 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 			}
 		}
 
-		// Series-like + episode rỗng: trả danh sách nguồn theo từng tập
 		if episodeSlug == "" {
 			allSources := make([]provider.VideoSource, 0)
 			for _, ep := range movie.Episodes {
@@ -248,11 +223,9 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 					})
 				}
 			}
-
 			if len(allSources) == 0 {
 				return nil, fmt.Errorf("không có danh sách tập hoặc nguồn phát")
 			}
-
 			return &provider.StreamingDTO{
 				MovieID: movie.ID.String(),
 				Title:   movie.Title,
@@ -263,17 +236,15 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 		for _, ep := range movie.Episodes {
 			if episodeSlugMatch(ep.Slug, episodeSlug) {
 				if len(ep.MediaSources) > 0 {
-					src := ep.MediaSources[0] // Lấy server đầu tiên
+					src := ep.MediaSources[0]
 					return &provider.StreamingDTO{
 						MovieID:   movie.ID.String(),
 						EpisodeID: ep.ID.String(),
-						Sources: []provider.VideoSource{
-							{
-								Label: src.ServerName,
-								URL:   src.SourceKey, // Link MP4/M3U8 lưu trong DB
-								Type:  src.SourceType,
-							},
-						},
+						Sources: []provider.VideoSource{{
+							Label: src.ServerName,
+							URL:   src.SourceKey,
+							Type:  src.SourceType,
+						}},
 					}, nil
 				}
 			}
@@ -281,9 +252,6 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 		return nil, fmt.Errorf("không tìm thấy tập '%s' hoặc nguồn phát", episodeSlug)
 	}
 
-	// 🌐 API BÊN THỨ 3 (Ophim1): Gọi API lấy link tươi (Fresh Link)
-	// episode rỗng => provider trả danh sách tập; episode có giá trị => trả tập tương ứng
-	// Link từ API thường có hạn (expire), nên mỗi lần bấm Play phải gọi lại API
 	streaming, err := s.provider.GetStreamingLinks(ctx, movie.ExternalID, episodeSlug)
 	if err != nil {
 		return nil, fmt.Errorf("lỗi lấy link từ provider: %w", err)
@@ -293,21 +261,65 @@ func (s *MovieService) GetWatchLinks(ctx context.Context, slug string, episodeSl
 }
 
 // ==========================================
+// 📂 CATEGORY-BASED FILTERING (MỚI)
+// ==========================================
+
+// GetMoviesByCategory: Lọc phim theo Genre hoặc Country
+func (s *MovieService) GetMoviesByCategory(ctx context.Context, categoryType, slug string, page, limit int, year int, status string) ([]models.Movie, int64, error) {
+	// 1. Validate category type
+	if categoryType != "genre" && categoryType != "country" {
+		return nil, 0, errors.New("invalid category type: must be 'genre' or 'country'")
+	}
+
+	// 2. Build filter struct
+	filters := &repository.MovieFilter{
+		Page:   page,
+		Limit:  limit,
+		Year:   year,
+		Status: status,
+	}
+
+	// 3. Call repository
+	movies, total, err := s.repo.ListByCategory(ctx, categoryType, strings.TrimSpace(slug), filters)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list movies by category: %w", err)
+	}
+
+	return movies, total, nil
+}
+
+// GetMoviesByYear: Lọc phim theo năm, hỗ trợ kết hợp genre
+func (s *MovieService) GetMoviesByYear(ctx context.Context, year int, page, limit int, status, genreSlug string) ([]models.Movie, int64, error) {
+	// 1. Validate year cơ bản
+	if year < 1900 || year > time.Now().Year()+2 {
+		return nil, 0, errors.New("invalid year parameter")
+	}
+
+	// 2. Build filter struct
+	filters := &repository.MovieFilter{
+		Page:      page,
+		Limit:     limit,
+		Status:    status,
+		GenreSlug: strings.TrimSpace(genreSlug),
+	}
+
+	// 3. Call repository
+	movies, total, err := s.repo.ListByYear(ctx, year, filters)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list movies by year: %w", err)
+	}
+
+	return movies, total, nil
+}
+
+// ==========================================
 // 🛠️ HELPER FUNCTIONS
 // ==========================================
 
-// convertDTOToModel: Chuyển Provider DTO -> GORM Model
-// internal/service/movie_service.go
-
-// convertDTOToModel: Chuyển Provider DTO → GORM Model
-// ⚠️ QUAN TRỌNG: Chỉ lưu metadata, KHÔNG lưu episodes từ external API
 func (s *MovieService) convertDTOToModel(dto *provider.MovieDTO) *models.Movie {
 	movie := &models.Movie{
-		// 🔑 Hybrid Source Tracking
-		Source:     dto.Source,
-		ExternalID: dto.ExternalID,
-
-		// 📋 Metadata cơ bản
+		Source:        dto.Source,
+		ExternalID:    dto.ExternalID,
 		Title:         dto.Title,
 		OriginalTitle: dto.OriginalTitle,
 		Slug:          dto.Slug,
@@ -315,22 +327,16 @@ func (s *MovieService) convertDTOToModel(dto *provider.MovieDTO) *models.Movie {
 		ThumbURL:      dto.ThumbURL,
 		PosterURL:     dto.PosterURL,
 		BackdropURL:   dto.BackdropURL,
-
-		// 📊 Metadata cho search/filter
-		Type:        dto.Type,
-		Status:      dto.Status,
-		ReleaseYear: dto.ReleaseYear,
-		Rating:      dto.Rating,
-		Duration:    dto.Runtime,
-		LastSyncedAt: time.Now(),
-
-		// 🎬 Episodes:
-		// - External API: KHÔNG lưu (fetch tươi khi play)
-		// - Self-hosted: Sẽ được set riêng qua Admin Handler
-		Episodes: nil, // ← Quan trọng: không lưu episodes từ Ophim1
+		Type:          dto.Type,
+		Status:        dto.Status,
+		ReleaseYear:   dto.ReleaseYear,
+		Rating:        dto.Rating,
+		Duration:      dto.Runtime,
+		LastSyncedAt:  time.Now(),
+		Episodes:      nil, // External API episodes không lưu DB, fetch tươi khi play
 	}
 
-	// Map categories (genres/countries) → Lưu vào DB để search/filter nhanh
+	// Map categories (genres/countries)
 	for _, genre := range dto.Genres {
 		movie.Categories = append(movie.Categories, models.Category{
 			Name: genre,
@@ -342,7 +348,6 @@ func (s *MovieService) convertDTOToModel(dto *provider.MovieDTO) *models.Movie {
 	return movie
 }
 
-// slugify: Chuyển "Hành Động" -> "hanh-dong"
 func slugify(name string) string {
 	s := strings.ToLower(name)
 	s = strings.ReplaceAll(s, " ", "-")
@@ -350,9 +355,6 @@ func slugify(name string) string {
 	return s
 }
 
-// isSeriesType: Kiểm tra xem type có phải series-like không
-// Series-like types: "series", "hoathinh", "phimbo", "tvshows", etc.
-// Phim lẻ: "movie", "phim-le", "single", etc.
 func isSeriesType(t string) bool {
 	t = strings.ToLower(t)
 	seriesTypes := map[string]bool{
@@ -365,11 +367,9 @@ func isSeriesType(t string) bool {
 	return seriesTypes[t]
 }
 
-// episodeSlugMatch: hỗ trợ match episode=1 với slug dạng tap-1/episode-1
 func episodeSlugMatch(episodeSlug string, selected string) bool {
 	episodeSlug = strings.ToLower(strings.TrimSpace(episodeSlug))
 	selected = strings.ToLower(strings.TrimSpace(selected))
-
 	if episodeSlug == selected {
 		return true
 	}
